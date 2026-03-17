@@ -1,0 +1,9 @@
+{
+  "background": [22, 15, 8],
+  "title_color": [255, 215, 80],
+  "text_color": [245, 233, 210],
+  "message_color": [255, 248, 180],
+  "reel_bg": [60, 40, 20],
+  "cell_bg": [80, 52, 24],
+  "accent": [255, 196, 78]
+}

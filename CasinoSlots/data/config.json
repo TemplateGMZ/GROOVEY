@@ -1,0 +1,69 @@
+{
+  "slot_games": [
+    {
+      "name": "Royal Gold Slots",
+      "theme": "royal_gold",
+      "symbols": ["💎", "7", "🍒", "🔔", "⭐", "🂡"],
+      "payouts": {
+        "💎": 20,
+        "7": 15,
+        "🍒": 8,
+        "🔔": 10,
+        "⭐": 12,
+        "🂡": 18
+      }
+    },
+    {
+      "name": "Neon Vegas Slots",
+      "theme": "neon_vegas",
+      "symbols": ["🎲", "7", "🍋", "BAR", "🪙", "🍀"],
+      "payouts": {
+        "🎲": 16,
+        "7": 14,
+        "🍋": 7,
+        "BAR": 11,
+        "🪙": 13,
+        "🍀": 9
+      }
+    },
+    {
+      "name": "Emerald Fortune",
+      "theme": "emerald_fortune",
+      "symbols": ["👑", "7", "🍇", "🧧", "💰", "🔱"],
+      "payouts": {
+        "👑": 17,
+        "7": 15,
+        "🍇": 8,
+        "🧧": 12,
+        "💰": 18,
+        "🔱": 14
+      }
+    }
+  ],
+  "game_modes": [
+    {
+      "name": "Casual",
+      "description": "Friendly pace with low risk.",
+      "starting_credits": 100,
+      "min_bet": 1,
+      "max_bet": 10,
+      "jackpot_multiplier": 12
+    },
+    {
+      "name": "High Roller",
+      "description": "Larger bankroll and bigger stakes.",
+      "starting_credits": 500,
+      "min_bet": 5,
+      "max_bet": 50,
+      "jackpot_multiplier": 20
+    },
+    {
+      "name": "Survival",
+      "description": "Tight credits and sharp decisions.",
+      "starting_credits": 40,
+      "min_bet": 1,
+      "max_bet": 5,
+      "jackpot_multiplier": 25
+    }
+  ]
+}

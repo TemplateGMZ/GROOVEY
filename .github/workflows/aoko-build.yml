@@ -1,13 +1,10 @@
 name: Compile Aoko modern Chest ESP DLL
 on:
   push:
-    branches:
-      - aoko-chestesp-build
+    branches: [aoko-chestesp-build]
   workflow_dispatch:
-
 permissions:
   contents: read
-
 jobs:
   build:
     runs-on: windows-latest
@@ -37,18 +34,30 @@ jobs:
       - name: Apply improved Chest ESP
         shell: pwsh
         run: python aoko-build/patch_aoko.py "$env:AOKO_SOURCE"
-      - name: Build 64-bit modern bridge DLL
-        shell: pwsh
+      - name: Compile modern bridge under MSYS2
+        shell: msys2 {0}
         run: |
-          $bat = Join-Path $env:AOKO_SOURCE "McInjector/build_261.bat"
-          $source = Get-Content -Raw $bat
-          $source = $source.Replace("C:\mingw64\mingw64\bin\g++.exe", "C:\msys64\mingw64\bin\g++.exe")
-          $source = $source.Replace("C:/Program Files/Java/jdk-17", $env:JAVA_HOME.Replace("\", "/"))
-          [IO.File]::WriteAllText($bat, $source)
-          & cmd /c $bat
-          if ($LASTEXITCODE -ne 0) { throw "Native compilation failed ($LASTEXITCODE)" }
-          $output = Join-Path $env:AOKO_SOURCE "McInjector/bridge_261.dll"
-          if (-not (Test-Path $output)) { throw "Compiler produced no bridge_261.dll" }
+          set -e
+          SRC="$(cygpath -u "$AOKO_SOURCE")/McInjector"
+          JAVA_HEADERS="$(cygpath -u "$JAVA_HOME")/include"
+          cd "$SRC"
+          g++ -m64 -std=c++11 -shared -DIMGUI_IMPL_VULKAN_NO_PROTOTYPES -o bridge_261.dll \
+          src/main/cpp/bridge_261.cpp src/main/cpp/nick_hider_jvmti.cpp \
+          src/main/cpp/anti_debuff_jvmti.cpp src/main/cpp/kill_aura_premotion.cpp \
+          src/main/cpp/render_backend.cpp src/main/cpp/gl_loader.cpp \
+          src/main/cpp/jni_core/resolver.cpp src/main/cpp/jni_core/helper_bridge.cpp \
+          src/main/cpp/imgui/imgui.cpp src/main/cpp/imgui/imgui_draw.cpp \
+          src/main/cpp/imgui/imgui_tables.cpp src/main/cpp/imgui/imgui_widgets.cpp \
+          src/main/cpp/imgui/imgui_impl_win32.cpp src/main/cpp/imgui/imgui_impl_opengl3.cpp \
+          src/main/cpp/imgui/imgui_impl_vulkan.cpp \
+          src/main/cpp/imgui/minhook_src/buffer.c src/main/cpp/imgui/minhook_src/hook.c \
+          src/main/cpp/imgui/minhook_src/trampoline.c src/main/cpp/imgui/minhook_src/hde/hde64.c \
+          -I"$JAVA_HEADERS" -I"$JAVA_HEADERS/win32" \
+          -Isrc/main/cpp -Isrc/main/cpp/imgui -Isrc/main/cpp/vulkan \
+          -Isrc/main/cpp/imgui/minhook_src -Isrc/main/cpp/imgui/minhook_src/include \
+          -lws2_32 -lopengl32 -lgdi32 -ldwmapi \
+          -static-libgcc -static-libstdc++ -Wl,--add-stdcall-alias
+          test -s bridge_261.dll
       - uses: actions/upload-artifact@v4
         with:
           name: aoko-chestesp-modern-dll

@@ -102,5 +102,66 @@ render = r"""                        // Render in world-space with a projected 3
                             fg->AddLine(points[i],points[j],outline,lineThick);
                         }"""
 s=s[:start]+render+s[end:]
+
+# Render-frame camera pose. The old background snapshot was intentionally
+# asynchronous, which caused chests to drift on the screen during camera turns.
+# Keep JNI operations to Get*Field only; no method calls on this render path.
+once("static void RenderOverlayPanels(\n",
+r"""// Get camera pose during the actual rendered frame so ESP follows blocks.
+static bool TryReadFrameChestCamera121(LegoVec3* pos, float* yawOut, float* pitchOut) {
+    if (!g_jvm || !g_stateJniReady || !g_mcInstance ||
+        !g_gameRendererField_121 || !g_gameRendererCameraField_121 ||
+        !g_cameraPosF_121 || !g_cameraYawF_121 || !g_cameraPitchF_121 ||
+        !g_vec3dX_121 || !g_vec3dY_121 || !g_vec3dZ_121) return false;
+    JNIEnv* env = nullptr;
+    if (g_jvm->GetEnv(reinterpret_cast<void**>(&env), JNI_VERSION_1_6) != JNI_OK || !env)
+        return false;
+    if (env->ExceptionCheck()) return false;
+    LockGuard lk(g_jniRemapMtx);
+    jobject gr = env->GetObjectField(g_mcInstance, g_gameRendererField_121);
+    if (env->ExceptionCheck()) { env->ExceptionClear(); gr = nullptr; }
+    if (!gr) return false;
+    jobject cam = env->GetObjectField(gr, g_gameRendererCameraField_121);
+    if (env->ExceptionCheck()) { env->ExceptionClear(); cam = nullptr; }
+    env->DeleteLocalRef(gr);
+    if (!cam) return false;
+    jobject v = env->GetObjectField(cam, g_cameraPosF_121);
+    if (env->ExceptionCheck()) { env->ExceptionClear(); v = nullptr; }
+    if (!v) { env->DeleteLocalRef(cam); return false; }
+    const double x = env->GetDoubleField(v, g_vec3dX_121);
+    const double y = env->GetDoubleField(v, g_vec3dY_121);
+    const double z = env->GetDoubleField(v, g_vec3dZ_121);
+    const float yaw = env->GetFloatField(cam, g_cameraYawF_121);
+    const float pitch = env->GetFloatField(cam, g_cameraPitchF_121);
+    const bool ok = !env->ExceptionCheck() &&
+        std::isfinite(x) && std::isfinite(y) && std::isfinite(z) &&
+        std::isfinite(yaw) && std::isfinite(pitch);
+    if (env->ExceptionCheck()) env->ExceptionClear();
+    env->DeleteLocalRef(v);
+    env->DeleteLocalRef(cam);
+    if (!ok) return false;
+    *pos = {x, y, z};
+    *yawOut = yaw;
+    *pitchOut = pitch;
+    return true;
+}
+
+static void RenderOverlayPanels(
+""", "frame-camera-helper")
+
+once("                // Use shared camera data (same source as nametags – no redundant JNI fetch)\n"
+     "                const LegoVec3   espCam   = sharedCam;\n"
+     "                const float      espYaw   = sharedYaw;\n"
+     "                const float      espPitch = sharedPitch;\n"
+     "                const bool       espMatsOk = sharedMatsOk;\n",
+     "                // Use the current render frame's camera pose whenever available.\n"
+     "                LegoVec3 espCam = sharedCam;\n"
+     "                float espYaw = sharedYaw;\n"
+     "                float espPitch = sharedPitch;\n"
+     "                const bool framePoseOk = TryReadFrameChestCamera121(&espCam, &espYaw, &espPitch);\n"
+     "                // Avoid mixing current camera pose with stale background view matrices.\n"
+     "                const bool espMatsOk = !framePoseOk && sharedMatsOk;\n",
+     "chest-frame-projection")
+
 path.write_text(s, encoding="utf-8")
 print(f"Patched modern Chest ESP: {path}")

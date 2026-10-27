@@ -15,7 +15,7 @@ def once(before, after, name):
     s = s.replace(before, after, 1)
 
 once("    bool hasScreenRect;\n};\nstatic std::vector<ChestData121> g_chestList;",
-     "    bool hasScreenRect;\n    int kind = 0;\n};\nstatic std::vector<ChestData121> g_chestList;",
+     "    bool hasScreenRect;\n    int kind;\n};\nstatic std::vector<ChestData121> g_chestList;",
      "chest kind member")
 once("struct ChestChunkCache121 { std::vector<ChestData121> hits; };",
      "struct ChestChunkCache121 { std::vector<ChestData121> hits; DWORD scannedAtMs = 0; };",

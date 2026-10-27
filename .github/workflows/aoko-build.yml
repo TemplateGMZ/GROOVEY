@@ -1,0 +1,57 @@
+name: Compile Aoko modern Chest ESP DLL
+on:
+  push:
+    branches:
+      - aoko-chestesp-build
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: windows-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: msys2/setup-msys2@v2
+        with:
+          msystem: MINGW64
+          install: mingw-w64-x86_64-gcc
+      - name: Download pinned public Aoko source
+        shell: pwsh
+        run: |
+          $url = "https://github.com/naczo5/aoko-client/archive/82c5830145ee9bc8dfa06faae87de4dae92c43b4.zip"
+          Invoke-WebRequest -Uri $url -OutFile aoko-src.zip
+          Expand-Archive aoko-src.zip -DestinationPath . -Force
+          $root = (Get-ChildItem -Directory -Filter "aoko-client-*" | Select-Object -First 1).FullName
+          if (-not $root) { throw "Aoko source not found" }
+          Add-Content -Path $env:GITHUB_ENV -Value "AOKO_SOURCE=$root"
+      - name: Apply improved Chest ESP
+        shell: pwsh
+        run: python aoko-build/patch_aoko.py "$env:AOKO_SOURCE"
+      - name: Build 64-bit modern bridge DLL
+        shell: pwsh
+        run: |
+          $bat = Join-Path $env:AOKO_SOURCE "McInjector/build_261.bat"
+          $source = Get-Content -Raw $bat
+          $source = $source.Replace("C:\mingw64\mingw64\bin\g++.exe", "C:\msys64\mingw64\bin\g++.exe")
+          $source = $source.Replace("C:/Program Files/Java/jdk-17", $env:JAVA_HOME.Replace("\", "/"))
+          [IO.File]::WriteAllText($bat, $source)
+          & cmd /c $bat
+          if ($LASTEXITCODE -ne 0) { throw "Native compilation failed ($LASTEXITCODE)" }
+          $output = Join-Path $env:AOKO_SOURCE "McInjector/bridge_261.dll"
+          if (-not (Test-Path $output)) { throw "Compiler produced no bridge_261.dll" }
+      - uses: actions/upload-artifact@v4
+        with:
+          name: aoko-chestesp-modern-dll
+          path: aoko-client-*/McInjector/bridge_261.dll
+          retention-days: 3
+          if-no-files-found: error

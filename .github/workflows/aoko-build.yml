@@ -34,6 +34,16 @@ jobs:
       - name: Apply improved Chest ESP
         shell: pwsh
         run: python aoko-build/patch_aoko.py "$env:AOKO_SOURCE"
+      - name: Compile Fabric world-matrix capture helper and embed it
+        shell: pwsh
+        run: |
+          $java = "aoko-build/java/aoko/render/WorldMatrixTap.java"
+          & javac --release 8 $java
+          if ($LASTEXITCODE -ne 0) { throw "World matrix Java helper failed to compile" }
+          $bytes = [IO.File]::ReadAllBytes("aoko-build/java/aoko/render/WorldMatrixTap.class")
+          $hex = ($bytes | ForEach-Object { "0x{0:X2}" -f $_ }) -join ","
+          $header = "#pragma once`nstatic const unsigned char kAokoWorldMatrixTapClass[] = { $hex };`n"
+          [IO.File]::WriteAllText((Join-Path $env:AOKO_SOURCE "McInjector/src/main/cpp/aoko_world_matrix_class.h"), $header)
       - name: Compile modern bridge under MSYS2
         shell: msys2 {0}
         run: |

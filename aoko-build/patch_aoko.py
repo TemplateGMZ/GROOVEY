@@ -163,5 +163,105 @@ once("                // Use shared camera data (same source as nametags – no 
      "                const bool espMatsOk = !framePoseOk && sharedMatsOk;\n",
      "chest-frame-projection")
 
+
+# Fabric world-render hook provides actual projection and modelview matrices.
+# This is fundamentally different from predicting screen coordinates from yaw/FOV.
+once("static void RenderOverlayPanels(\n",
+r"""#include "aoko_world_matrix_class.h"
+
+// Fabric 1.21.x exact world-frame projection captured from WorldRenderEvents.LAST.
+struct AokoWorldMatrixFrame121 {
+    Matrix4x4 view, proj;
+    LegoVec3 camera;
+    DWORD seenAt = 0;
+    bool valid = false;
+};
+static AokoWorldMatrixFrame121 g_aokoWorldMatrixFrame121;
+static Mutex g_aokoWorldMatrixMutex121;
+static bool g_aokoWorldMatrixHookInstalled121 = false;
+
+static void JNICALL AokoOnWorldMatrices121(JNIEnv* env, jclass,
+        jfloatArray viewArr, jfloatArray projArr, jobject camera) {
+    if (!env || !viewArr || !projArr || !camera || !g_cameraPosF_121 ||
+        !g_vec3dX_121 || !g_vec3dY_121 || !g_vec3dZ_121) return;
+    if (env->GetArrayLength(viewArr) != 16 || env->GetArrayLength(projArr) != 16)
+        return;
+    jobject pos = env->GetObjectField(camera, g_cameraPosF_121);
+    if (env->ExceptionCheck()) { env->ExceptionClear(); pos = nullptr; }
+    if (!pos) return;
+    const double x = env->GetDoubleField(pos, g_vec3dX_121);
+    const double y = env->GetDoubleField(pos, g_vec3dY_121);
+    const double z = env->GetDoubleField(pos, g_vec3dZ_121);
+    if (env->ExceptionCheck()) { env->ExceptionClear(); env->DeleteLocalRef(pos); return; }
+    env->DeleteLocalRef(pos);
+    if (!std::isfinite(x) || !std::isfinite(y) || !std::isfinite(z)) return;
+    AokoWorldMatrixFrame121 next;
+    env->GetFloatArrayRegion(viewArr, 0, 16, next.view.m);
+    env->GetFloatArrayRegion(projArr, 0, 16, next.proj.m);
+    if (env->ExceptionCheck()) { env->ExceptionClear(); return; }
+    next.camera = {x,y,z};
+    next.seenAt = GetTickCount();
+    next.valid = true;
+    LockGuard lk(g_aokoWorldMatrixMutex121);
+    g_aokoWorldMatrixFrame121 = next;
+}
+
+static void AokoInstallWorldMatrixHook121(JNIEnv* env) {
+    if (!env || !g_gameClassLoader || g_aokoWorldMatrixHookInstalled121)
+        return;
+    jclass helper = env->DefineClass("aoko/render/WorldMatrixTap",
+        g_gameClassLoader,
+        reinterpret_cast<const jbyte*>(kAokoWorldMatrixTapClass),
+        (jsize)sizeof(kAokoWorldMatrixTapClass));
+    if (env->ExceptionCheck()) { env->ExceptionClear(); return; }
+    if (!helper) return;
+    JNINativeMethod natives[] = {
+        {const_cast<char*>("onMatrices"),
+         const_cast<char*>("([F[FLjava/lang/Object;)V"),
+         reinterpret_cast<void*>(AokoOnWorldMatrices121)}
+    };
+    if (env->RegisterNatives(helper, natives, 1) != JNI_OK) {
+        if (env->ExceptionCheck()) env->ExceptionClear();
+        env->DeleteLocalRef(helper); return;
+    }
+    jmethodID install = env->GetStaticMethodID(helper, "install", "(Ljava/lang/ClassLoader;)Z");
+    if (env->ExceptionCheck()) { env->ExceptionClear(); install = nullptr; }
+    if (install) {
+        jboolean installed = env->CallStaticBooleanMethod(helper, install, g_gameClassLoader);
+        if (env->ExceptionCheck()) { env->ExceptionClear(); installed = JNI_FALSE; }
+        if (installed == JNI_TRUE) {
+            g_aokoWorldMatrixHookInstalled121 = true;
+            Log("ChestESP: Fabric WorldRenderEvents.LAST exact matrices ACTIVE");
+        }
+    }
+    env->DeleteLocalRef(helper);
+}
+
+static void RenderOverlayPanels(
+""", "World-frame hook")
+
+# Run registration on the JNI worker, never in OpenGL/Vulkan present callback.
+once("                ReadCameraState(env);\n",
+     "                ReadCameraState(env);\n"
+     "                AokoInstallWorldMatrixHook121(env);\n",
+     "world matrix hook registration")
+
+# Use actual frame matrices rather than reconstructed angle math for Chest ESP.
+once("                // Avoid mixing current camera pose with stale background view matrices.\n"
+     "                const bool espMatsOk = !framePoseOk && sharedMatsOk;\n"
+     "                const Matrix4x4  espProj  = sharedProj;\n"
+     "                const Matrix4x4  espView  = sharedView;\n",
+     "                // Exact world-frame matrices, including interpolation, FOV effects,\n"
+     "                // bobbing, and renderer-specific projection transforms.\n"
+     "                AokoWorldMatrixFrame121 frame;\n"
+     "                { LockGuard lk(g_aokoWorldMatrixMutex121); frame = g_aokoWorldMatrixFrame121; }\n"
+     "                const bool frameValid = frame.valid &&\n"
+     "                    (GetTickCount() - frame.seenAt) < 120;\n"
+     "                if (frameValid) espCam = frame.camera;\n"
+     "                const bool espMatsOk = frameValid;\n"
+     "                const Matrix4x4 espProj = frameValid ? frame.proj : sharedProj;\n"
+     "                const Matrix4x4 espView = frameValid ? frame.view : sharedView;\n",
+     "world-frame render selection")
+
 path.write_text(s, encoding="utf-8")
 print(f"Patched modern Chest ESP: {path}")

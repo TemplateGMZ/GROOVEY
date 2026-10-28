@@ -11,9 +11,10 @@ public final class WorldMatrixTap implements InvocationHandler {
     private static Method matrixGetter;
     private static Method viewGetter;
     private static Method projectionGetter;
+    private static Method cameraGetter;
     private static volatile boolean active;
 
-    public static native void onMatrices(float[] positionMatrix, float[] projectionMatrix);
+    public static native void onMatrices(float[] positionMatrix, float[] projectionMatrix, Object camera);
 
     public static synchronized boolean install(ClassLoader loader) {
         if (active) return true;
@@ -29,6 +30,7 @@ public final class WorldMatrixTap implements InvocationHandler {
             Class<?> matrixType = Class.forName("org.joml.Matrix4f", false, loader);
             viewGetter = contextType.getMethod("positionMatrix");
             projectionGetter = contextType.getMethod("projectionMatrix");
+            cameraGetter = contextType.getMethod("camera");
             matrixGetter = matrixType.getMethod("get", float[].class);
             Object event = events.getField("LAST").get(null);
             Object candidate = Proxy.newProxyInstance(loader,
@@ -54,7 +56,7 @@ public final class WorldMatrixTap implements InvocationHandler {
                     float[] proj = new float[16];
                     matrixGetter.invoke(vm, (Object)view);
                     matrixGetter.invoke(pm, (Object)proj);
-                    onMatrices(view, proj);
+                    onMatrices(view, proj, cameraGetter.invoke(ctx));
                 }
             } catch (Throwable ignored) {
                 // The overlay retains its existing projection fallback.

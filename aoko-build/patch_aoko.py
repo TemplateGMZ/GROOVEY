@@ -241,6 +241,11 @@ static void RenderOverlayPanels(
 """, "World-frame hook")
 
 # Run registration on the JNI worker, never in OpenGL/Vulkan present callback.
+once("static DWORD WINAPI FastPollThreadProc(LPVOID) {",
+     "static void AokoInstallWorldMatrixHook121(JNIEnv* env);\n"
+     "static DWORD WINAPI FastPollThreadProc(LPVOID) {",
+     "hook forward declaration")
+
 once("                ReadCameraState(env);\n",
      "                ReadCameraState(env);\n"
      "                AokoInstallWorldMatrixHook121(env);\n",
